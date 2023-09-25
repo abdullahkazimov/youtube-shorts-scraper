@@ -24,20 +24,35 @@ def write_json(new_data, filename='data.json'):
         file.seek(0)
         json.dump(file_data, file, indent=4)
 
-def get_youtube_thumbnail(video_url):
-    response = requests.get(video_url)
+def find_first_shorts_video(driver, url):
+    driver.get(url)
 
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, "html.parser")
-        thumbnail = soup.find("meta", property="og:image")
+    max_scrolls = 10  # Set a maximum number of scrolls
+    scrolls = 0
+
+    while scrolls < max_scrolls:
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.PAGE_DOWN)
+        time.sleep(1)
+        new_height = driver.execute_script("return document.body.scrollHeight")
         
-        if thumbnail:
-            thumbnail_url = thumbnail["content"]
-            return thumbnail_url
+        if new_height == last_height:
+            scrolls += 1
         else:
-            print("Thumbnail not found on the page.")
+            scrolls = 0
+        
+        shorts_videos = driver.find_elements(By.XPATH, '//a[@aria-label="Short video"]')
+        if shorts_videos:
+            break
+        
+def get_youtube_thumbnail(driver):
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    thumbnail = soup.find("meta", property="og:image")        
+    if thumbnail:
+        thumbnail_url = thumbnail["content"]
+        return thumbnail_url
     else:
-        print(f"Error accessing the page. Status code: {response.status_code}")
+        print("Thumbnail not found on the page.")
         
 def scrape_short(driver, url):
     driver.get(url)
@@ -62,7 +77,7 @@ def scrape_short(driver, url):
 
     url = driver.current_url
     
-    thumbnail_url = get_youtube_thumbnail(url)
+    thumbnail_url = get_youtube_thumbnail(driver)
 
     
     res = {
@@ -83,20 +98,17 @@ def scroll_down(driver):
     time.sleep(10)
 
 
-def all_urls(url):
+def all_urls(driver):
     def scroll_to_bottom(driver):
         for i in range(5):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(2)
-
-    driver = webdriver.Firefox()
     
     try:
-        driver.get(url)
         scroll_to_bottom(driver)
         page_source = driver.page_source
     finally:
-        driver.quit()
+        pass
     
     soup = BeautifulSoup(page_source, 'html.parser')
     links = soup.find_all('a', href=True)
@@ -111,14 +123,14 @@ def get_latest_short(url):
     return all_urls(url)[8]
 
 url = "https://www.youtube.com/@" + input("Channel: @") + "/shorts/"
-
-driver = webdriver.Firefox()
-urls = all_urls(url)[8:]
+driver = webdriver.Chrome()
+find_first_shorts_video(driver, url)
+urls = all_urls(driver)[8:]
 urls = list(dict.fromkeys(urls))
 
 for url in urls:
     ans = scrape_short(driver, url)
-    time.sleep(10)
+    time.sleep(2)
     print(ans)
     
 driver.quit()
